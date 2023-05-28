@@ -1,0 +1,154 @@
+#!/bin/bash
+
+
+cpu_model="$(sed 's/^.*: //' <(grep -m1 -i 'model name' /proc/cpuinfo))"
+cpu_cores="$(grep -Eo [[:digit:]] <(grep -m1 -i "cpu cores" /proc/cpuinfo))"
+cpu_threads="$(nproc --all)"
+
+
+function change_freq
+{
+
+    cpu_max_dir=~/.config/cpu-limit
+    cpu_max_file="$cpu_max_dir/cpu-max"
+
+
+    # Aqui possui um bug na hora do sistema pegar a frequência máxima da cpu, às vezes
+    # ele pega a frequência base como frequência máxima se você não redefinir a
+    # frequência que você alterou, então eu guardo o valor na primeira inicialização
+    # da aplicação em um arquivo para servir como referência.
+
+    [ -e "$cpu_max_file" ] && {
+        echo "DEBUG: Usando frequência máxima do cache."
+        cpu_clock_max="$(< "$cpu_max_file")"
+    } || {
+        echo "DEBUG: Usando frequência máxima do sistema."
+        cpu_clock_max="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq)"
+        [ ! -e "$cpu_max_dir" ] && mkdir -p "$cpu_max_dir"
+        echo "$cpu_clock_max" > "$cpu_max_file"
+    }
+
+
+    cpu_clock_min="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_min_freq)"
+    cpu_clock_base="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/base_frequency)"
+    cpu_clock_set="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq)"
+
+
+    select_clock="$(
+    yad --title='Change Frequency' \
+        --window-icon="$( [ -e "ChangeFrequency.png" ] && echo "ChangeFrequency.png" || echo "/usr/share/pixmaps/ChangeFrequency.png" )" \
+        --fixed \
+        --center \
+        --borders=10 \
+        --button="Apply Frequency":0 \
+        --button="Cancel":1 \
+        --text="$(
+            sed 's/...$/ MHz<\/b>\t/' <<< " CPU Minimal Clock: <b>$cpu_clock_min"
+            sed 's/...$/ MHz<\/b>\t/' <<< " CPU Base Clock: <b>$cpu_clock_base"
+            sed 's/...$/ MHz<\/b>\t/' <<< " CPU Max Clock: <b>$cpu_clock_max"
+            echo " " )" \
+        --scale \
+        --min-value=$cpu_clock_min \
+        --value=$cpu_clock_set \
+        --max-value=$cpu_clock_max \
+        --step=100000
+    )" && [ "$select_clock" != "$cpu_clock_set" ] && pkexec sh -c "sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq <<< '$select_clock'"
+}
+export -f change_freq
+
+
+function change_gov
+{
+
+    gov="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_available_governors)"
+    current="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor)"
+
+    select_governor="$(
+    yad --title='Change Governor' \
+        --window-icon="$( [ -e "ChangeFrequency.png" ] && echo "ChangeFrequency.png" || echo "/usr/share/pixmaps/ChangeFrequency.png" )" \
+        --fixed \
+        --center \
+        --borders=10 \
+        --button="Apply Governor":0 \
+        --button="Cancel":1 \
+        --text="Available Governors:\n<b>$gov</b>" \
+        --form \
+        --field ' ':LBL '' \
+        --field 'Select Governor':CB "${gov/ /!}" \
+        --field ' ':LBL ''
+    )" && sel="$(awk -F'|' '{ print$2 }' <<< $select_governor)" && [ "$current" != "$sel" ] && pkexec sh -c "sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor <<< '$sel'"
+}
+export -f change_gov
+
+
+function freq_view
+{
+    i=0
+    c=1
+    for x in $(eval echo cpu{1..$(nproc)})
+    {
+        cpus+=(--field "CPU-$((i++))" )
+    }
+
+    [ "$i" -gt 6 ] && c=2
+
+    while read $(eval echo cpu{1..${i}}) <<< $(paste /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq)
+    do
+
+        for v in $(eval echo \$cpu{1..${i}})
+        {
+            [ $v -ge 1000000 ] && {
+                : ${v#?}; echo ${v%??????}.${_%????} GHz
+            } || {
+                : ${v#???}; echo ${v%???}.${_%?} MHz
+            }
+        }
+
+        sleep 1
+    done | \
+    yad --title='Frequency Viewer' \
+        --window-icon="$( [ -e "FrequencyCPU.png" ] && echo "FrequencyCPU.png" || echo "/usr/share/pixmaps/FrequencyCPU.png" )" \
+        --columns="$c" \
+        --fixed \
+        --center \
+        --cycle-read \
+        --borders=10 \
+        --no-buttons \
+        --form ${cpus[*]}
+}
+export -f freq_view
+
+
+while read v <<< $(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq)
+do
+    echo ''
+    echo 'bash -c "change_freq"'
+    echo 'bash -c "change_gov"'
+    echo 'bash -c "freq_view"'
+    echo ''
+    echo $(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor)
+
+    [ $v -ge 1000000 ] && {
+        : ${v#?}; echo ${v%??????}.${_%????} GHz
+    } || {
+        : ${v#???}; echo ${v%???}.${_%?} MHz
+    }
+
+    sleep 1
+done | \
+yad --title='FrequencyCPU' \
+    --window-icon="$( [ -e "FrequencyCPU.png" ] && echo "FrequencyCPU.png" || echo "/usr/share/pixmaps/FrequencyCPU.png" )" \
+    --form \
+    --fixed \
+    --center \
+    --cycle-read \
+    --borders=10 \
+    --no-buttons \
+    --text="\nCPU Model: <b>$cpu_model</b>\nCores/Threads: <b>$cpu_cores</b> / <b>$cpu_threads</b>" \
+    --field " ":LBL \
+    --field "Change Frequency":FBTN \
+    --field "Change Governor":FBTN \
+    --field "Frequency Viewer":FBTN \
+    --field " ":LBL \
+    --field 'Current Governor' \
+    --field 'Current Frequency'
