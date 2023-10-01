@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FrequencyCPU
+Comment=Change CPU Frequency
+Exec=FrequencyCPU %F
+Icon=FrequencyCPU
+Terminal=false
+Categories=Settings;System;Utility;

@@ -1,14 +1,17 @@
 #!/bin/bash
 
-
 cpu_model="$(sed 's/^.*: //' <(grep -m1 -i 'model name' /proc/cpuinfo))"
 cpu_cores="$(grep -Eo [[:digit:]] <(grep -m1 -i "cpu cores" /proc/cpuinfo))"
 cpu_threads="$(nproc --all)"
 
+command='/usr/bin/yad'
+[ ! -e "$command" ] && command=$( which yad )
 
 function change_freq
 {
 
+    command='/usr/bin/yad'
+    [ ! -e "$command" ] && command=$( which yad )
     cpu_max_dir=~/.config/cpu-limit
     cpu_max_file="$cpu_max_dir/cpu-max"
 
@@ -35,7 +38,8 @@ function change_freq
 
 
     select_clock="$(
-    yad --title='Change Frequency' \
+    "$command" \
+        --title='Change Frequency' \
         --window-icon="$( [ -e "ChangeFrequency.png" ] && echo "ChangeFrequency.png" || echo "/usr/share/pixmaps/ChangeFrequency.png" )" \
         --fixed \
         --center \
@@ -60,11 +64,14 @@ export -f change_freq
 function change_gov
 {
 
+    command='/usr/bin/yad'
+    [ ! -e "$command" ] && command=$( which yad )
     gov="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_available_governors)"
     current="$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor)"
 
     select_governor="$(
-    yad --title='Change Governor' \
+    "$command" \
+        --title='Change Governor' \
         --window-icon="$( [ -e "ChangeFrequency.png" ] && echo "ChangeFrequency.png" || echo "/usr/share/pixmaps/ChangeFrequency.png" )" \
         --fixed \
         --center \
@@ -83,6 +90,10 @@ export -f change_gov
 
 function freq_view
 {
+
+    command='/usr/bin/yad'
+    [ ! -e "$command" ] && command=$( which yad )
+
     i=0
     c=1
     for x in $(eval echo cpu{1..$(nproc)})
@@ -106,7 +117,8 @@ function freq_view
 
         sleep 1
     done | \
-    yad --title='Frequency Viewer' \
+    "$command" \
+        --title='Frequency Viewer' \
         --window-icon="$( [ -e "FrequencyCPU.png" ] && echo "FrequencyCPU.png" || echo "/usr/share/pixmaps/FrequencyCPU.png" )" \
         --columns="$c" \
         --fixed \
@@ -136,7 +148,8 @@ do
 
     sleep 1
 done | \
-yad --title='FrequencyCPU' \
+"$command" \
+    --title='FrequencyCPU' \
     --window-icon="$( [ -e "FrequencyCPU.png" ] && echo "FrequencyCPU.png" || echo "/usr/share/pixmaps/FrequencyCPU.png" )" \
     --form \
     --fixed \
